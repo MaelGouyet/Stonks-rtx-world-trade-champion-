@@ -49,10 +49,10 @@ def make_decision(epoch: int, price: float):
     base_allocation = 0.91
     
     if len(price_history) >= 25:
-        # Signal 1: RSI
-        rsi = calculate_rsi(price_history, period=14)
+        # Signal 1: RSI with optimized period (13)
+        rsi = calculate_rsi(price_history, period=13)
         
-        # Signal 2: Bollinger Z-score
+        # Signal 2: Bollinger Z-score with optimized window (25)
         ma_25 = np.mean(price_history[-25:])
         std_25 = np.std(price_history[-25:])
         z_score = (price - ma_25) / std_25 if std_25 > 0 else 0
