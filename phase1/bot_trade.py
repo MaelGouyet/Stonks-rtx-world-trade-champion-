@@ -14,6 +14,14 @@ import numpy as np
 
 price_history = []
 
+def calculate_atr(prices, period=14):
+    if len(prices) < period + 1:
+        return 0
+    highs = np.maximum.accumulate(prices[-period-1:])
+    lows = np.minimum.accumulate(prices[-period-1:])
+    tr = highs - lows
+    return np.mean(tr[-period:])
+
 def calculate_rsi(prices, period=13):
     """
     Calculate RSI with optimized period of 13
@@ -94,7 +102,11 @@ def make_decision(epoch: int, price: float):
             base_allocation = 0.75
         elif total_signal <= -3:  # Double confirmation vente forte
             base_allocation = 0.68
-    
+
+    atr = calculate_atr(price_history)
+    volatility_factor = min(1.0, 0.02 / atr) if atr > 0 else 1.0
+    base_allocation *= volatility_factor
+
     return {
         'Asset A': base_allocation,
         'Cash': 1.0 - base_allocation
