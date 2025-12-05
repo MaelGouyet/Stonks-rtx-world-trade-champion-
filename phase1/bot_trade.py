@@ -1,18 +1,6 @@
 """
-Stratégie de Trading Quantitative - Phase 1
-Algorithme : Momentum RSI avec Confirmation de Tendance
-
-Principe OPTIMAL :
-- Utilisation du RSI (Relative Strength Index) pour détecter survente/surachat
-- Confirmation avec moyennes mobiles pour éviter faux signaux
-- Allocation de base très élevée (90%) pour capter la tendance haussière
-- Protection ciblée uniquement sur signaux forts et confirmés
-
-Performance testée:
-- Base Score: 0.0223 (+37% vs version précédente)
-- PnL: +7.47% (vs +5.25%)
-- Sharpe: 0.0567 (vs 0.0374)
-- Max DD: -20.51% (meilleur contrôle du risque)
+VERSION 15: Hybrid RSI + Bollinger (Best of Both Worlds)
+Combine les meilleurs signaux de RSI et Mean Reversion
 """
 
 import numpy as np
@@ -20,19 +8,10 @@ import numpy as np
 price_history = []
 
 def calculate_rsi(prices, period=14):
-    """
-    Calcule le Relative Strength Index (RSI)
-    
-    RSI < 30 : Zone de survente (opportunité d'achat)
-    RSI > 70 : Zone de surachat (prudence, potentiel de baisse)
-    RSI 40-60 : Zone neutre
-    
-    Le RSI mesure la force du momentum récent.
-    """
+    """Calcule le RSI"""
     if len(prices) < period + 1:
-        return 50  # Neutre par défaut
+        return 50
     
-    # Calcul des variations de prix
     deltas = np.diff(prices[-period-1:])
     gains = np.where(deltas > 0, deltas, 0)
     losses = np.where(deltas < 0, -deltas, 0)
@@ -41,63 +20,66 @@ def calculate_rsi(prices, period=14):
     avg_loss = np.mean(losses)
     
     if avg_loss == 0:
-        return 100  # Que des gains = RSI max
+        return 100
     
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
 def make_decision(epoch: int, price: float):
-    """
-    Stratégie basée sur RSI et confirmation de tendance.
-    
-    Logique:
-    1. Allocation de base élevée (90%) - l'asset monte globalement
-    2. Augmenter à 95% en zone de survente (RSI < 30) - opportunité
-    3. Réduire à 70% en zone de surachat (RSI > 70) - protection
-    4. Confirmation avec MA20 pour éviter les faux signaux
-    
-    Parameters
-    ----------
-    epoch : int
-        L'époque (index temporel) actuelle
-    price : float
-        Le prix actuel de l'Asset A
-    
-    Returns
-    -------
-    dict
-        Allocation du portefeuille {'Asset A': float, 'Cash': float}
-    """
+    """Hybride RSI + Bollinger pour double confirmation"""
     price_history.append(price)
     
-    # Allocation de base élevée pour capter la tendance haussière
-    base_allocation = 0.90
+    base_allocation = 0.91
     
-    if len(price_history) >= 20:
-        # Calcul du RSI (14 périodes standard)
+    if len(price_history) >= 25:
+        # Signal 1: RSI
         rsi = calculate_rsi(price_history, period=14)
         
-        # Moyenne mobile 20 jours pour confirmation de tendance
-        ma_20 = np.mean(price_history[-20:])
+        # Signal 2: Bollinger Z-score
+        ma_25 = np.mean(price_history[-25:])
+        std_25 = np.std(price_history[-25:])
+        z_score = (price - ma_25) / std_25 if std_25 > 0 else 0
         
-        # SIGNAL 1: RSI indique survente → Opportunité d'achat
+        # Combiner les deux signaux avec pondération
+        rsi_signal = 0
         if rsi < 30:
-            base_allocation = 0.95  # Augmenter l'exposition
-        
-        # SIGNAL 2: RSI indique surachat → Prudence
+            rsi_signal = 2  # Fort achat
+        elif rsi < 45:
+            rsi_signal = 1  # Achat
         elif rsi > 70:
-            base_allocation = 0.70  # Réduire l'exposition
+            rsi_signal = -2  # Forte vente
+        elif rsi > 55:
+            rsi_signal = -1  # Vente
         
-        # SIGNAL 3: Confirmation avec MA20
-        # Si prix bien en-dessous de MA20, réduire davantage
-        if price < ma_20 * 0.97:  # Prix 3%+ sous MA20
-            base_allocation *= 0.85  # Réduction additionnelle
-    
-    allocation_asset_a = base_allocation
-    allocation_cash = 1.0 - allocation_asset_a
+        bb_signal = 0
+        if z_score < -1.5:
+            bb_signal = 2
+        elif z_score < -0.8:
+            bb_signal = 1
+        elif z_score > 1.5:
+            bb_signal = -2
+        elif z_score > 0.8:
+            bb_signal = -1
+        
+        # Score composite
+        total_signal = rsi_signal + bb_signal
+        
+        # Allocation basée sur le signal combiné
+        if total_signal >= 3:  # Double confirmation achat fort
+            base_allocation = 0.98
+        elif total_signal == 2:
+            base_allocation = 0.95
+        elif total_signal == 1:
+            base_allocation = 0.92
+        elif total_signal == -1:
+            base_allocation = 0.82
+        elif total_signal == -2:
+            base_allocation = 0.75
+        elif total_signal <= -3:  # Double confirmation vente forte
+            base_allocation = 0.68
     
     return {
-        'Asset A': allocation_asset_a,
-        'Cash': allocation_cash
+        'Asset A': base_allocation,
+        'Cash': 1.0 - base_allocation
     }
