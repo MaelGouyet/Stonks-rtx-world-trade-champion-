@@ -1,13 +1,7 @@
 """
-VERSION 15.1: Hybrid RSI + Bollinger - OPTIMIZED
-Grid-search optimized parameters: RSI=13, Bollinger_Window=25
-Combines the best signals from RSI momentum and Bollinger mean reversion
-
-Performance:
-- Base Score: 0.0392 (NEW RECORD!)
-- PnL: +14.64% (176% of asset's +8.32% return)
-- Sharpe: ~0.11 (excellent risk-adjusted return)
-- MaxDD: <-20% (controlled risk)
+VERSION 27: Fine-tuning de V25
+- Ajustement des seuils RSI/BB
+- Optimisation des allocations
 """
 
 import numpy as np
@@ -22,11 +16,7 @@ def calculate_atr(prices, period=14):
     tr = highs - lows
     return np.mean(tr[-period:])
 
-def calculate_rsi(prices, period=13):
-    """
-    Calculate RSI with optimized period of 13
-    (Grid search result: 13 performs better than standard 14)
-    """
+def calculate_rsi(prices, period=12):  # Légèrement plus rapide
     if len(prices) < period + 1:
         return 50
     
@@ -41,71 +31,67 @@ def calculate_rsi(prices, period=13):
         return 100
     
     rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+    return 100 - (100 / (1 + rs))
 
 def make_decision(epoch: int, price: float):
-    """
-    Hybrid strategy with optimized parameters:
-    - RSI period: 13 (faster response than 14)
-    - Bollinger window: 25 (better stability than 20-24)
-    
-    Double confirmation system for high-confidence signals
-    """
     price_history.append(price)
     
-    base_allocation = 0.91
+    base_allocation = 0.93
     
-    if len(price_history) >= 25:
-        # Signal 1: RSI with optimized period (13)
-        rsi = calculate_rsi(price_history, period=13)
+    if len(price_history) >= 24:
+        rsi = calculate_rsi(price_history, period=12)
         
-        # Signal 2: Bollinger Z-score with optimized window (25)
-        ma_25 = np.mean(price_history[-25:])
-        std_25 = np.std(price_history[-25:])
-        z_score = (price - ma_25) / std_25 if std_25 > 0 else 0
+        ma_24 = np.mean(price_history[-24:])
+        std_24 = np.std(price_history[-24:])
+        z_score = (price - ma_24) / std_24 if std_24 > 0 else 0
         
-        # Combiner les deux signaux avec pondération
+        # RSI signal optimisé
         rsi_signal = 0
-        if rsi < 30:
-            rsi_signal = 2  # Fort achat
-        elif rsi < 45:
-            rsi_signal = 1  # Achat
-        elif rsi > 70:
-            rsi_signal = -2  # Forte vente
-        elif rsi > 55:
-            rsi_signal = -1  # Vente
+        if rsi < 25:
+            rsi_signal = 2
+        elif rsi < 40:
+            rsi_signal = 1
+        elif rsi > 75:
+            rsi_signal = -2
+        elif rsi > 60:
+            rsi_signal = -1
         
+        # Bollinger signal optimisé
         bb_signal = 0
-        if z_score < -1.5:
+        if z_score < -1.7:
             bb_signal = 2
-        elif z_score < -0.8:
+        elif z_score < -0.65:
             bb_signal = 1
-        elif z_score > 1.5:
+        elif z_score > 1.7:
             bb_signal = -2
-        elif z_score > 0.8:
+        elif z_score > 0.65:
             bb_signal = -1
         
-        # Score composite
         total_signal = rsi_signal + bb_signal
         
-        # Allocation basée sur le signal combiné
-        if total_signal >= 3:  # Double confirmation achat fort
-            base_allocation = 0.98
+        if total_signal >= 4:
+            base_allocation = 1.0
+        elif total_signal >= 3:
+            base_allocation = 1.0
         elif total_signal == 2:
-            base_allocation = 0.95
+            base_allocation = 0.98
         elif total_signal == 1:
-            base_allocation = 0.92
+            base_allocation = 0.95
+        elif total_signal == 0:
+            base_allocation = 0.93
         elif total_signal == -1:
-            base_allocation = 0.82
+            base_allocation = 0.83
         elif total_signal == -2:
-            base_allocation = 0.75
-        elif total_signal <= -3:  # Double confirmation vente forte
             base_allocation = 0.68
+        elif total_signal == -3:
+            base_allocation = 0.55
+        elif total_signal <= -4:
+            base_allocation = 0.45
 
     atr = calculate_atr(price_history)
-    volatility_factor = min(1.0, 0.02 / atr) if atr > 0 else 1.0
-    base_allocation *= volatility_factor
+    if atr > 0:
+        volatility_factor = min(1.0, 0.028 / atr)
+        base_allocation *= volatility_factor
 
     return {
         'Asset A': base_allocation,
