@@ -37,8 +37,8 @@ def make_decision(epoch: int, priceA: float, priceB: float):
     rets = returns_from_prices(prices)
     n_assets = prices.shape[1]
 
-    window: int = 4
-    risk_free: float = 0.04
+    window: int = 5
+    risk_free: float = 0.07
 
     if len(rets) < 2:
         w = equal_weighted(n_assets)
