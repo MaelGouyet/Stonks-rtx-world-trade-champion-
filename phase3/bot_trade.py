@@ -10,5 +10,5 @@ def make_decision(epoch,priceA,priceB):
     ra,rb=max(0,ra),max(0,rb)
     s=ra+rb
     if s==0: return {"Asset A":0,"Asset B":0,"Cash":1}
-    wA,wB=ra/s*.999,rb/s*.999
+    wA,wB=ra/s*.9999,rb/s*.9999
     return {"Asset A":wA,"Asset B":wB,"Cash":1-wA-wB}
